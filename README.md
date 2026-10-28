@@ -20,3 +20,11 @@ Depuis `app/`, installer les dépendances pour pouvoir lancer les tests :
 npm ci
 npm test
 ```
+
+## Image Docker
+
+Construire l'image Docker de l'application :
+
+```sh
+docker build -t glossaflow:local app
+```
