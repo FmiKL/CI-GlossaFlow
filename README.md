@@ -6,25 +6,50 @@ Pipeline CI/CD pour GlossaFlow, une application de traduction.
 
 ## Base de données
 
-Les fichiers d'initialisation de PostgreSQL se trouvent dans `infra/postgres/` :
-
-- [schema.sql](infra/postgres/schema.sql) crée la table translations `app.translations`.
-- [roles.sql](infra/postgres/roles.sql) crée le user `glossaflow_app` et attribue ses droits.
-- [init.sh](infra/postgres/init.sh) exécute les scripts SQL et définit le mot de passe du user.
+Les fichiers d'initialisation de PostgreSQL se trouvent dans [infra/postgres/](infra/postgres/).
 
 ## Tests
 
-Depuis `app/`, installer les dépendances pour pouvoir lancer les tests :
+Depuis `app/` :
 
 ```sh
 npm ci
 npm test
 ```
 
-## Image Docker
+## Lancement local
 
-Construire l'image Docker de l'application :
+Depuis la racine du dépôt, dans le même terminal, avec Docker démarré et Terraform installé :
+
+### 1. Construire l'image
 
 ```sh
 docker build -t glossaflow:local app
+```
+
+### 2. Préparer l'environnement
+
+```sh
+. ./infra/prepare.sh
+```
+
+### 3. Démarrer l'application
+
+```sh
+terraform -chdir=infra init -backend-config="path=$GLOSSAFLOW_DIR/terraform.tfstate"
+terraform -chdir=infra apply
+```
+
+Vérifier l'API :
+
+```sh
+curl --fail --retry 20 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/health
+```
+
+## Nettoyage
+
+Supprimer l'environnement et ses données :
+
+```sh
+terraform -chdir=infra destroy && rm -r "$GLOSSAFLOW_DIR"
 ```
