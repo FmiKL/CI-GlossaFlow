@@ -9,7 +9,8 @@
   "description": "",
   "main": "src/server.js",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/translation.test.js",
+    "test:integration": "node --test test/integration.test.js",
     "start": "node src/server.js"
   },
   "keywords": [],

@@ -10,11 +10,17 @@ Les fichiers d'initialisation de PostgreSQL se trouvent dans [infra/postgres/](i
 
 ## Tests
 
-Depuis `app/` :
+Tests unitaires, depuis `app/` :
 
 ```sh
 npm ci
 npm test
+```
+
+Test d'intégration API/PostgreSQL, après le démarrage de l'application :
+
+```sh
+npm run test:integration
 ```
 
 ## Lancement local
