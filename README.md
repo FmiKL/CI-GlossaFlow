@@ -1,6 +1,8 @@
 # GlossaFlow
 
-Application de traduction de textes.
+Application de traduction de textes avec son pipeline CI/CD.
+
+> **Note :** la traduction est simulée, l'application sert simplement de support pour le pipeline.
 
 ## Base de données
 
@@ -20,6 +22,17 @@ Test d'intégration API/PostgreSQL, après le démarrage de l'application :
 ```sh
 npm run test:integration
 ```
+
+## Intégration continue
+
+Le [workflow GitHub Actions](.github/workflows/ci.yml) se lance avec les pushes/PR sur `main` :
+
+1. Tests unitaires
+2. Build de l'image Docker
+3. Scan de l'image API avec Trivy
+4. Déploiement avec Terraform
+5. Test d'intégration
+6. Nettoyage
 
 ## Lancement local
 

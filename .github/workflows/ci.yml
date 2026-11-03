@@ -1,0 +1,138 @@
+name: CI GlossaFlow
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.0
+
+      - name: Installer les dépendances
+        working-directory: app
+        run: npm ci
+
+      - name: Lancer les tests unitaires
+        working-directory: app
+        run: npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Construire l'image
+        run: docker build -t glossaflow:local app
+
+      - name: Installer Trivy
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.0/trivy_0.76.0_Linux-64bit.tar.gz \
+            --output "$RUNNER_TEMP/trivy.tar.gz"
+          # Vérifier l'archive avec l'empreinte publiée par Trivy.
+          echo "e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
+
+      - name: Analyser l'image de l'API
+        run: |
+          "$RUNNER_TEMP/trivy" image --severity HIGH,CRITICAL --exit-code 1 \
+            --table-mode summary glossaflow:local
+
+      # Transférer l'image à integration pour éviter de devoir la reconstruire.
+      - name: Exporter l'image
+        run: docker image save --output "$RUNNER_TEMP/image.tar" glossaflow:local
+
+      - name: Transférer l'image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  integration:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.0
+          terraform_wrapper: false
+
+      - name: Vérifier le format Terraform
+        run: terraform -chdir=infra fmt -check
+
+      - name: Récupérer l'image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+
+      - name: Charger l'image
+        run: docker image load --input "$RUNNER_TEMP/image.tar"
+
+      - name: Préparer l'environnement
+        id: prepare
+        run: |
+          . ./infra/prepare.sh
+          # Masquer les MDP et transmettre les variables aux étapes suivantes.
+          echo "::add-mask::$(cat "$GLOSSAFLOW_DIR/pg_admin_password")"
+          echo "::add-mask::$(cat "$GLOSSAFLOW_DIR/pg_app_password")"
+          echo "GLOSSAFLOW_DIR=$GLOSSAFLOW_DIR" >> "$GITHUB_ENV"
+          echo "TF_DATA_DIR=$TF_DATA_DIR" >> "$GITHUB_ENV"
+          echo "TF_VAR_secrets_dir=$TF_VAR_secrets_dir" >> "$GITHUB_ENV"
+          echo "TF_VAR_api_image_id=$TF_VAR_api_image_id" >> "$GITHUB_ENV"
+
+      - name: Déployer avec Terraform
+        run: |
+          # Réappliquer umask pour protéger l'état Terraform.
+          umask 077
+          terraform -chdir=infra init -input=false -lockfile=readonly -backend-config="path=$GLOSSAFLOW_DIR/terraform.tfstate"
+          terraform -chdir=infra apply -input=false -auto-approve
+
+      - name: Tester l'intégration
+        timeout-minutes: 1
+        run: |
+          curl --fail --retry 20 --retry-delay 1 --retry-all-errors --max-time 2 http://127.0.0.1:8080/health
+          npm --prefix app run test:integration
+
+      # Nettoyer l'environnement même après un échec.
+      - name: Nettoyer l'environnement
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          umask 077
+          if [ -f "$GLOSSAFLOW_DIR/terraform.tfstate" ]; then
+            terraform -chdir=infra destroy -input=false -auto-approve
+          fi
+          rm -r "$GLOSSAFLOW_DIR"
