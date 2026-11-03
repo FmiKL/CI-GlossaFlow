@@ -5,7 +5,7 @@ const baseUrl = "http://127.0.0.1:8080";
 
 test("enregistre et lit une traduction", async () => {
     const health = await fetch(`${baseUrl}/health`);
-    assert.equal(health.status, 200);
+    assert.equal(health.status, 201);
     
     const response = await fetch(`${baseUrl}/translations`, {
         method: "POST",
