@@ -23,7 +23,7 @@ Test d'intégration API/PostgreSQL, après le démarrage de l'application :
 npm run test:integration
 ```
 
-## Intégration continue
+## Pipeline CI/CD
 
 Le [workflow GitHub Actions](.github/workflows/ci.yml) se lance avec les pushes/PR sur `main` :
 
@@ -33,6 +33,7 @@ Le [workflow GitHub Actions](.github/workflows/ci.yml) se lance avec les pushes/
 4. Déploiement avec Terraform
 5. Test d'intégration
 6. Nettoyage
+7. Publication dans GHCR (après un push sur `main`)
 
 ## Lancement local
 
