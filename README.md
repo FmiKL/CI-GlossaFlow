@@ -17,6 +17,7 @@ CI-GlossaFlow/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml           # Définit les étapes du pipeline CI/CD
+├── .trivyignore             # Exceptions temporaires du scan Trivy
 ├── app/
 │   ├── .dockerignore        # Liste les fichiers exclus du build Docker
 │   └── Dockerfile           # Définit comment construire l'image de l'API
